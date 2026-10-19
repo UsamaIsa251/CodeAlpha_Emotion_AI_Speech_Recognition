@@ -1,0 +1,539 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EmotiVoice AI | Speech Emotion Recognition</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #08111f;
+  --panel: #101d30;
+  --line: #25364c;
+  --text: #f1f5f9;
+  --muted: #9aabc0;
+  --cyan: #67e8f9;
+  --blue: #60a5fa;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(ellipse at top, #142d49 0%, var(--bg) 60%);
+  color: var(--text);
+  font-family: Inter, system-ui, sans-serif;
+}
+header, main, footer { width: min(100% - 32px, 900px); margin: auto; }
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 24px 0; border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.logo {
+  display: grid; place-items: center; width: 46px; height: 46px;
+  border-radius: 15px; background: #12334a; font-size: 25px;
+}
+h1 { font-size: 20px; margin: 0; letter-spacing: -.5px; }
+.subtitle, .muted { color: var(--muted); font-size: 13px; }
+.subtitle { margin-top: 4px; }
+.status {
+  border: 1px solid #245b50; color: #86efac; background: #10352f;
+  border-radius: 999px; padding: 8px 11px; font-size: 12px;
+  white-space: nowrap;
+}
+main { padding: 30px 0 45px; }
+.intro { text-align: center; margin-bottom: 25px; }
+.eyebrow { color: var(--cyan); font-size: 11px; font-weight: 800; letter-spacing: 2px; }
+h2 { font-size: clamp(26px, 5vw, 38px); margin: 12px 0; letter-spacing: -1px; }
+.intro p { color: var(--muted); line-height: 1.7; margin: 0 auto; max-width: 540px; }
+.card {
+  background: rgba(16,29,48,.92); border: 1px solid var(--line);
+  border-radius: 22px; padding: clamp(18px, 4vw, 30px);
+  box-shadow: 0 20px 70px #0003;
+}
+.recorder { text-align: center; }
+.mic-wrap {
+  width: 138px; height: 138px; border-radius: 50%; margin: 18px auto;
+  display: grid; place-items: center; background: #102b43;
+  border: 1px solid #24536c; position: relative;
+}
+.mic-button {
+  width: 92px; height: 92px; border: 0; border-radius: 50%;
+  background: linear-gradient(145deg, #67e8f9, #60a5fa);
+  color: #061322; font-size: 34px; cursor: pointer;
+  box-shadow: 0 0 30px #22d3ee22; transition: transform .2s, filter .2s;
+}
+.mic-button:hover { transform: scale(1.06); filter: brightness(1.08); }
+.mic-button:focus-visible, button:focus-visible { outline: 3px solid white; outline-offset: 4px; }
+.recording .mic-button { background: #fb7185; animation: pulse 1.5s infinite; }
+.recording .mic-wrap::before {
+  content: ""; position: absolute; inset: -10px; border-radius: 50%;
+  border: 1px solid #fb718566; animation: ring 1.8s infinite;
+}
+@keyframes pulse { 50% { box-shadow: 0 0 0 12px #fb71851b; } }
+@keyframes ring { 50% { transform: scale(1.08); opacity: .3; } }
+#recordStatus { font-weight: 650; margin: 8px 0; }
+#timer { color: var(--cyan); font-variant-numeric: tabular-nums; font-size: 24px; }
+canvas { display: block; width: 100%; height: 62px; margin: 12px 0; }
+.hint { color: var(--muted); font-size: 13px; line-height: 1.6; }
+.secondary {
+  border: 1px solid var(--line); color: var(--text); background: #17263a;
+  border-radius: 11px; padding: 11px 16px; cursor: pointer;
+}
+.secondary:disabled { opacity: .4; cursor: not-allowed; }
+audio { width: 100%; margin-top: 14px; }
+.results { margin-top: 22px; display: none; }
+.results.show { display: block; animation: appear .4s ease-out; }
+@keyframes appear { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.result-hero {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 18px;
+  background: linear-gradient(120deg, #15374a, #172641);
+  border: 1px solid #2a5369; padding: 22px; border-radius: 18px;
+}
+.emoji { font-size: 42px; }
+.result-hero h3 { margin: 6px 0; font-size: 28px; text-transform: capitalize; }
+.score { color: var(--cyan); font-weight: 750; }
+.section-title { display: flex; justify-content: space-between; gap: 12px; margin: 25px 0 16px; }
+.section-title h3 { margin: 0; font-size: 16px; }
+.score-row { margin: 16px 0; }
+.score-label { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; margin-bottom: 8px; }
+.track { height: 9px; background: #24344a; border-radius: 99px; overflow: hidden; }
+.fill { height: 100%; width: 0; background: linear-gradient(90deg, #22d3ee, #818cf8); border-radius: inherit; transition: width .7s ease; }
+.notice { margin-top: 20px; border-radius: 12px; background: #142338; padding: 13px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.error { color: #fda4af; background: #451a27; padding: 12px; border-radius: 10px; display: none; line-height: 1.5; }
+.error.show { display: block; }
+footer { padding: 18px 0 30px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; text-align: center; }
+@media (max-width: 480px) {
+  header { align-items: flex-start; }
+  .status { font-size: 10px; padding: 7px; }
+  .card { border-radius: 17px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo">🎙️</div>
+    <div>
+      <h1>EmotiVoice AI</h1>
+      <div class="subtitle">Speech Emotion Intelligence</div>
+    </div>
+  </div>
+  <div class="status" id="apiStatus">● Checking API</div>
+</header>
+
+<main>
+  <section class="intro">
+    <div class="eyebrow">VOICE • MACHINE LEARNING • INSIGHTS</div>
+    <h2>Hear what your voice expresses.</h2>
+    <p>Record a short voice sample and let the AI model estimate the emotion expressed in your speech.</p>
+  </section>
+
+  <section class="card recorder">
+    <div class="eyebrow">VOICE STUDIO</div>
+    <div class="mic-wrap" id="micWrap">
+      <button class="mic-button" id="recordButton" aria-label="Start recording">🎙</button>
+    </div>
+    <div id="recordStatus" aria-live="polite">Ready when you are</div>
+    <div id="timer">00:00</div>
+    <canvas id="waveform" aria-label="Live audio waveform"></canvas>
+    <p class="hint" id="hint">Click the microphone to begin. Click again to stop and analyze.</p>
+    <div id="errorBox" class="error" role="alert"></div>
+    <audio id="audioPlayback" controls hidden></audio>
+    <div style="margin-top:15px">
+      <button class="secondary" id="analyzeButton" disabled>Analyze recording</button>
+      <button class="secondary" id="resetButton">Start over</button>
+    </div>
+  </section>
+
+  <section class="card results" id="results" aria-live="polite">
+    <div class="eyebrow">ANALYSIS COMPLETE</div>
+    <div class="result-hero">
+      <div class="emoji" id="resultEmoji">🧠</div>
+      <div>
+        <div class="muted">Most likely category from this model</div>
+        <h3 id="resultEmotion">—</h3>
+        <div class="score" id="resultScore"></div>
+      </div>
+    </div>
+    <div class="section-title">
+      <h3>Emotion category scores</h3>
+      <span class="muted">Ranked by model score</span>
+    </div>
+    <div id="scoreList"></div>
+    <div class="notice">
+      These are model estimates based on audio features, not verified feelings or a psychological assessment. The model is an experimental demonstration trained on a small dataset.
+    </div>
+  </section>
+</main>
+
+<footer>EmotiVoice AI · CodeAlpha Speech Emotion Recognition · Built with FastAPI and scikit-learn</footer>
+
+<script>
+const API_URL = "http://127.0.0.1:8000";
+const $ = id => document.getElementById(id);
+
+const recordButton = $("recordButton");
+const micWrap = $("micWrap");
+const recordStatus = $("recordStatus");
+const timerDisplay = $("timer");
+const hint = $("hint");
+const canvas = $("waveform");
+const ctx = canvas.getContext("2d");
+const audioPlayback = $("audioPlayback");
+const analyzeButton = $("analyzeButton");
+const resetButton = $("resetButton");
+const results = $("results");
+const errorBox = $("errorBox");
+
+let audioContext = null;
+let stream = null;
+let source = null;
+let processor = null;
+let chunks = [];
+let recording = false;
+let samples = [];
+let startedAt = 0;
+let timerInterval = null;
+let animationFrame = null;
+let wavBlob = null;
+let busy = false;
+
+const emotionInfo = {
+  angry: ["😠", "Angry"],
+  calm: ["😌", "Calm"],
+  happy: ["😊", "Happy"],
+  sad: ["😔", "Sad"],
+  fearful: ["😨", "Fearful"],
+  disgust: ["😖", "Disgust"],
+  surprised: ["😲", "Surprised"],
+  neutral: ["😐", "Neutral"]
+};
+
+function setError(message) {
+  errorBox.textContent = message;
+  errorBox.classList.add("show");
+}
+function clearError() {
+  errorBox.textContent = "";
+  errorBox.classList.remove("show");
+}
+function setStatus(message) {
+  recordStatus.textContent = message;
+}
+function formatTime(seconds) {
+  const s = Math.max(0, Math.floor(seconds));
+  return String(Math.floor(s / 60)).padStart(2, "0") + ":" +
+         String(s % 60).padStart(2, "0");
+}
+
+async function checkAPI() {
+  try {
+    const response = await fetch(`${API_URL}/health`);
+    if (!response.ok) throw new Error("API unavailable");
+    $("apiStatus").textContent = "● API Connected";
+    $("apiStatus").style.color = "#86efac";
+  } catch {
+    $("apiStatus").textContent = "● API Offline";
+    $("apiStatus").style.color = "#fda4af";
+  }
+}
+checkAPI();
+
+function drawWaveform() {
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+  if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  ctx.strokeStyle = recording ? "#fb7185" : "#35516e";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  const data = chunks.length ? chunks[chunks.length - 1] : null;
+  for (let x = 0; x < width; x++) {
+    const index = data ? Math.floor(x / width * data.length) : -1;
+    const value = index >= 0 ? data[index] : 0;
+    const y = height / 2 + value * height * .42;
+    if (x === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  if (recording) animationFrame = requestAnimationFrame(drawWaveform);
+}
+drawWaveform();
+
+function encodeWav(floatSamples, sampleRate) {
+  const buffer = new ArrayBuffer(44 + floatSamples.length * 2);
+  const view = new DataView(buffer);
+  function writeString(offset, string) {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  }
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + floatSamples.length * 2, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, "data");
+  view.setUint32(40, floatSamples.length * 2, true);
+  let offset = 44;
+  for (let i = 0; i < floatSamples.length; i++, offset += 2) {
+    const sample = Math.max(-1, Math.min(1, floatSamples[i]));
+    view.setInt16(offset, sample < 0 ? sample * 32768 : sample * 32767, true);
+  }
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+async function startRecording() {
+  clearError();
+  results.classList.remove("show");
+  wavBlob = null;
+  samples = [];
+  chunks = [];
+  audioPlayback.hidden = true;
+  analyzeButton.disabled = true;
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
+    });
+
+    audioContext = new (window.AudioContext || window.webkitAudioContext)({
+      sampleRate: 16000
+    });
+    await audioContext.resume();
+
+    source = audioContext.createMediaStreamSource(stream);
+    processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+    processor.onaudioprocess = event => {
+      if (!recording) return;
+      const input = event.inputBuffer.getChannelData(0);
+      samples.push(new Float32Array(input));
+      chunks.push(new Float32Array(input));
+      if (chunks.length > 4) chunks.shift();
+    };
+
+    source.connect(processor);
+    processor.connect(audioContext.destination);
+
+    recording = true;
+    startedAt = Date.now();
+    micWrap.classList.add("recording");
+    recordButton.textContent = "■";
+    recordButton.setAttribute("aria-label", "Stop recording");
+    setStatus("Recording… speak naturally");
+    hint.textContent = "Click the microphone again when you finish speaking.";
+    timerDisplay.textContent = "00:00";
+
+    timerInterval = setInterval(() => {
+      timerDisplay.textContent = formatTime((Date.now() - startedAt) / 1000);
+    }, 250);
+    drawWaveform();
+  } catch (error) {
+    cleanupAudio();
+    setError(
+      error.name === "NotAllowedError"
+        ? "Microphone access was denied. Allow microphone access in your browser settings and try again."
+        : "Could not start the microphone. Use localhost or HTTPS and check that your microphone is connected."
+    );
+    setStatus("Microphone unavailable");
+  }
+}
+
+async function stopRecording() {
+  if (!recording) return;
+  recording = false;
+  clearInterval(timerInterval);
+  cancelAnimationFrame(animationFrame);
+
+  try {
+    const totalLength = samples.reduce((sum, chunk) => sum + chunk.length, 0);
+    const merged = new Float32Array(totalLength);
+    let offset = 0;
+    for (const chunk of samples) {
+      merged.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    if (merged.length < 1600) {
+      setError("That recording was very short. Please record at least a second of speech.");
+      setStatus("Recording too short");
+      cleanupAudio();
+      return;
+    }
+
+    wavBlob = encodeWav(merged, audioContext.sampleRate);
+    audioPlayback.src = URL.createObjectURL(wavBlob);
+    audioPlayback.hidden = false;
+    analyzeButton.disabled = false;
+    setStatus("Recording ready");
+    hint.textContent = "Listen to your recording, or analyze it now.";
+    timerDisplay.textContent = formatTime((Date.now() - startedAt) / 1000);
+  } catch (error) {
+    setError("Could not prepare the recording. Please try again.");
+    setStatus("Recording failed");
+  } finally {
+    cleanupAudio();
+    micWrap.classList.remove("recording");
+    recordButton.textContent = "🎙";
+    recordButton.setAttribute("aria-label", "Start recording");
+    drawWaveform();
+  }
+
+  // Automatically submit after the recording stops.
+  if (wavBlob) await analyzeRecording();
+}
+
+function cleanupAudio() {
+  if (processor) {
+    processor.disconnect();
+    processor.onaudioprocess = null;
+    processor = null;
+  }
+  if (source) {
+    source.disconnect();
+    source = null;
+  }
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+    stream = null;
+  }
+  if (audioContext) {
+    audioContext.close().catch(() => {});
+    audioContext = null;
+  }
+}
+
+async function analyzeRecording() {
+  if (!wavBlob || busy) return;
+  busy = true;
+  analyzeButton.disabled = true;
+  recordButton.disabled = true;
+  clearError();
+  results.classList.remove("show");
+  setStatus("Analyzing your voice…");
+  hint.textContent = "Sending audio to the AI model. This may take a few seconds.";
+
+  try {
+    const formData = new FormData();
+    formData.append("file", wavBlob, "microphone_recording.wav");
+
+    const response = await fetch(`${API_URL}/predict`, {
+      method: "POST",
+      body: formData
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || "The API could not analyze this recording.");
+    }
+
+    showResults(data);
+    setStatus("Analysis complete");
+    hint.textContent = "Your result is ready. Record again whenever you like.";
+  } catch (error) {
+    setError(
+      "Could not reach or use the prediction API. Make sure your FastAPI server is running at 127.0.0.1:8000. Details: " + error.message
+    );
+    setStatus("Analysis failed");
+  } finally {
+    busy = false;
+    analyzeButton.disabled = !wavBlob;
+    recordButton.disabled = false;
+  }
+}
+
+function showResults(data) {
+  const emotion = String(data.predicted_emotion || "unknown").toLowerCase();
+  const info = emotionInfo[emotion] || ["🧠", emotion];
+  const scores = Object.entries(data.category_scores || {})
+    .sort((a, b) => b[1] - a[1]);
+
+  $("resultEmoji").textContent = info[0];
+  $("resultEmotion").textContent = info[1];
+  const topScore = data.category_scores && data.category_scores[emotion];
+  $("resultScore").textContent = Number.isFinite(topScore)
+    ? `${(topScore * 100).toFixed(1)}% model score`
+    : "Top predicted category";
+
+  const list = $("scoreList");
+  list.replaceChildren();
+
+  for (const [name, value] of scores) {
+    const percent = Math.max(0, Math.min(100, Number(value) * 100));
+    const row = document.createElement("div");
+    row.className = "score-row";
+
+    const label = document.createElement("div");
+    label.className = "score-label";
+
+    const nameSpan = document.createElement("span");
+    nameSpan.textContent = (emotionInfo[name] || ["", name])[1];
+
+    const percentSpan = document.createElement("strong");
+    percentSpan.textContent = `${percent.toFixed(1)}%`;
+
+    label.append(nameSpan, percentSpan);
+
+    const track = document.createElement("div");
+    track.className = "track";
+    const fill = document.createElement("div");
+    fill.className = "fill";
+    fill.style.width = `${percent}%`;
+    track.append(fill);
+
+    row.append(label, track);
+    list.append(row);
+  }
+
+  results.classList.add("show");
+  results.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+recordButton.addEventListener("click", () => {
+  if (busy) return;
+  if (recording) stopRecording();
+  else startRecording();
+});
+analyzeButton.addEventListener("click", analyzeRecording);
+
+resetButton.addEventListener("click", () => {
+  if (recording) stopRecording();
+  clearError();
+  results.classList.remove("show");
+  wavBlob = null;
+  samples = [];
+  chunks = [];
+  audioPlayback.pause();
+  audioPlayback.removeAttribute("src");
+  audioPlayback.hidden = true;
+  analyzeButton.disabled = true;
+  setStatus("Ready when you are");
+  timerDisplay.textContent = "00:00";
+  hint.textContent = "Click the microphone to begin. Click again to stop and analyze.";
+  drawWaveform();
+});
+</script>
+</body>
+</html>

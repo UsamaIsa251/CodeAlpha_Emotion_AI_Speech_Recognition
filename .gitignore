@@ -1,0 +1,14 @@
+# Python environments and cache
+env/
+venv/
+__pycache__/
+*.pyc
+.env
+
+# Dataset and temporary files
+data/
+*.tmp
+
+# Editor settings
+.vscode/
+Audio_Speech_Actors_01-24_16k.zip
