@@ -28,31 +28,46 @@ MAX_FRAMES = 94
 TEST_SIZE = 0.25
 RANDOM_SEED = 42
 
+# Use separate filenames to preserve earlier models and results.
+MODEL_PATH = os.path.join(OUTPUT_DIR, "emotion_cnn_retrained.keras")
+CLASSES_PATH = os.path.join(OUTPUT_DIR, "emotion_classes_retrained.json")
+NORMALIZATION_PATH = os.path.join(
+    OUTPUT_DIR, "cnn_normalization_retrained.npz"
+)
+HISTORY_PATH = os.path.join(
+    OUTPUT_DIR, "cnn_training_history_retrained.npz"
+)
+EVALUATION_PATH = os.path.join(
+    OUTPUT_DIR, "cnn_evaluation_retrained.txt"
+)
+CONFUSION_PATH = os.path.join(
+    OUTPUT_DIR, "cnn_confusion_matrix_retrained.csv"
+)
+
 
 # -----------------------------
 # Extract MFCC features
 # -----------------------------
 def extract_features(file_path):
-    """Extract a fixed-size MFCC sequence from one audio file."""
+    """Extract a fixed-size MFCC sequence from an audio file."""
     audio, _ = librosa.load(
         file_path,
         sr=SAMPLE_RATE,
-        duration=3.0
+        duration=3.0,
     )
 
     mfcc = librosa.feature.mfcc(
         y=audio,
         sr=SAMPLE_RATE,
-        n_mfcc=N_MFCC
+        n_mfcc=N_MFCC,
     ).T
 
-    # Pad or truncate to a fixed number of frames.
     if mfcc.shape[0] < MAX_FRAMES:
         padding = MAX_FRAMES - mfcc.shape[0]
         mfcc = np.pad(
             mfcc,
             ((0, padding), (0, 0)),
-            mode="constant"
+            mode="constant",
         )
     else:
         mfcc = mfcc[:MAX_FRAMES, :]
@@ -61,38 +76,40 @@ def extract_features(file_path):
 
 
 # -----------------------------
-# Build CNN model
+# Build and compile CNN
 # -----------------------------
 def build_cnn(input_shape, number_of_classes):
+    """Build and compile the CNN emotion classifier."""
     model = tf.keras.Sequential([
         tf.keras.layers.Input(shape=input_shape),
-
         tf.keras.layers.Conv1D(
-            32, kernel_size=5, activation="relu"
+            filters=32,
+            kernel_size=5,
+            activation="relu",
         ),
         tf.keras.layers.BatchNormalization(),
         tf.keras.layers.MaxPooling1D(pool_size=2),
-
         tf.keras.layers.Conv1D(
-            64, kernel_size=3, activation="relu"
+            filters=64,
+            kernel_size=3,
+            activation="relu",
         ),
         tf.keras.layers.BatchNormalization(),
-
         tf.keras.layers.GlobalAveragePooling1D(),
-
         tf.keras.layers.Dense(32, activation="relu"),
-        tf.keras.layers.Dropout(0.5),
-
+        tf.keras.layers.Dropout(0.3),
         tf.keras.layers.Dense(
             number_of_classes,
-            activation="softmax"
+            activation="softmax",
         ),
     ])
 
     model.compile(
-        optimizer="adam",
+        optimizer=tf.keras.optimizers.Adam(
+            learning_rate=0.001
+        ),
         loss="sparse_categorical_crossentropy",
-        metrics=["accuracy"]
+        metrics=["accuracy"],
     )
 
     return model
@@ -107,23 +124,18 @@ def main():
     np.random.seed(RANDOM_SEED)
     tf.keras.utils.set_random_seed(RANDOM_SEED)
 
-    # Limit CPU threads to help on a low-memory computer.
+    # Limit CPU threads for the Chromebook environment.
     tf.config.threading.set_intra_op_parallelism_threads(2)
     tf.config.threading.set_inter_op_parallelism_threads(2)
 
-    file_paths = glob.glob(
-        os.path.join(DATA_DIR, "Actor_*", "*.wav")
+    file_paths = sorted(
+        glob.glob(os.path.join(DATA_DIR, "Actor_*", "*.wav"))
     )
-    file_paths.sort()
 
     if not file_paths:
         raise FileNotFoundError(
             f"No WAV files found in: {DATA_DIR}"
         )
-
-    features = []
-    labels = []
-    actors = []
 
     emotion_names = {
         "01": "neutral",
@@ -136,6 +148,10 @@ def main():
         "08": "surprised",
     }
 
+    features = []
+    labels = []
+    actors = []
+
     print(f"Found {len(file_paths)} WAV files.")
     print("Extracting MFCC features...")
 
@@ -143,8 +159,7 @@ def main():
         filename = os.path.basename(file_path)
         parts = filename.split("-")
 
-        # RAVDESS filename format:
-        # modality-emotion-intensity-statement-repetition-actor.wav
+        # RAVDESS filenames contain seven hyphen-separated fields.
         if len(parts) != 7:
             continue
 
@@ -171,17 +186,16 @@ def main():
         if index % 100 == 0:
             print(f"Processed {index}/{len(file_paths)} files.")
 
-    if len(features) == 0:
+    if not features:
         raise ValueError(
-            "No usable speech recordings were found. "
-            "Check DATA_DIR and the dataset filenames."
+            "No usable speech recordings found. "
+            "Check the dataset path and filenames."
         )
 
     X = np.asarray(features, dtype=np.float32)
     labels = np.asarray(labels)
     actors = np.asarray(actors)
 
-    # Encode emotion labels as integers.
     label_encoder = LabelEncoder()
     y = label_encoder.fit_transform(labels)
 
@@ -189,11 +203,12 @@ def main():
     print(f"Feature shape: {X.shape}")
     print(f"Emotion classes: {list(label_encoder.classes_)}")
 
-    # Keep each actor exclusively in either train or test.
+    # Keep each actor in either the training set or the test set,
+    # never both. This reduces speaker leakage in evaluation.
     splitter = GroupShuffleSplit(
         n_splits=1,
         test_size=TEST_SIZE,
-        random_state=RANDOM_SEED
+        random_state=RANDOM_SEED,
     )
 
     train_idx, test_idx = next(
@@ -208,27 +223,18 @@ def main():
     print(f"Training actors: {sorted(set(actors[train_idx]))}")
     print(f"Testing actors: {sorted(set(actors[test_idx]))}")
 
-    # -----------------------------
-    # Normalize using training data only
-    # -----------------------------
-    mean = X_train.mean(
-        axis=(0, 1),
-        keepdims=True
-    )
-    std = X_train.std(
-        axis=(0, 1),
-        keepdims=True
-    )
+    # Normalize using training data only.
+    mean = X_train.mean(axis=(0, 1), keepdims=True)
+    std = X_train.std(axis=(0, 1), keepdims=True)
     std = np.maximum(std, 1e-6)
 
     X_train = (X_train - mean) / std
     X_test = (X_test - mean) / std
 
-    # Save normalization statistics for future predictions.
     np.savez(
-        os.path.join(OUTPUT_DIR, "cnn_normalization.npz"),
+        NORMALIZATION_PATH,
         mean=mean,
-        std=std
+        std=std,
     )
 
     # -----------------------------
@@ -236,17 +242,17 @@ def main():
     # -----------------------------
     model = build_cnn(
         input_shape=X_train.shape[1:],
-        number_of_classes=len(label_encoder.classes_)
+        number_of_classes=len(label_encoder.classes_),
     )
 
     model.summary()
 
     early_stopping = tf.keras.callbacks.EarlyStopping(
-    monitor="val_loss",
-    patience=4,
-    min_delta=0.01,
-    restore_best_weights=True
-)
+        monitor="val_loss",
+        patience=4,
+        min_delta=0.01,
+        restore_best_weights=True,
+    )
 
     print("\nTraining CNN...")
 
@@ -257,16 +263,26 @@ def main():
         epochs=35,
         batch_size=16,
         callbacks=[early_stopping],
-        verbose=1
+        verbose=1,
+    )
+
+    np.savez(
+        HISTORY_PATH,
+        accuracy=history.history["accuracy"],
+        val_accuracy=history.history["val_accuracy"],
+        loss=history.history["loss"],
+        val_loss=history.history["val_loss"],
     )
 
     # -----------------------------
-    # Evaluate on the held-out actors
+    # Evaluate on held-out actors
     # -----------------------------
+    print("\nEvaluating on held-out test actors...")
+
     probabilities = model.predict(
         X_test,
         batch_size=16,
-        verbose=0
+        verbose=0,
     )
 
     predictions = np.argmax(probabilities, axis=1)
@@ -276,7 +292,7 @@ def main():
         y_test,
         predictions,
         average="macro",
-        zero_division=0
+        zero_division=0,
     )
 
     report = classification_report(
@@ -284,13 +300,13 @@ def main():
         predictions,
         labels=np.arange(len(label_encoder.classes_)),
         target_names=label_encoder.classes_,
-        zero_division=0
+        zero_division=0,
     )
 
     matrix = confusion_matrix(
         y_test,
         predictions,
-        labels=np.arange(len(label_encoder.classes_))
+        labels=np.arange(len(label_encoder.classes_)),
     )
 
     print("\n========== CNN RESULTS ==========")
@@ -302,30 +318,18 @@ def main():
     print(matrix)
 
     # -----------------------------
-    # Save outputs
+    # Save retrained model and results
     # -----------------------------
-    model_path = os.path.join(
-        OUTPUT_DIR,
-        "emotion_cnn_new.keras"
-    )
-    model.save(model_path)
+    model.save(MODEL_PATH)
 
-    with open(
-        os.path.join(OUTPUT_DIR, "emotion_classes.json"),
-        "w",
-        encoding="utf-8"
-    ) as file:
+    with open(CLASSES_PATH, "w", encoding="utf-8") as file:
         json.dump(
             label_encoder.classes_.tolist(),
             file,
-            indent=4
+            indent=4,
         )
 
-    with open(
-        os.path.join(OUTPUT_DIR, "cnn_evaluation.txt"),
-        "w",
-        encoding="utf-8"
-    ) as file:
+    with open(EVALUATION_PATH, "w", encoding="utf-8") as file:
         file.write(f"Test accuracy: {accuracy:.4f}\n")
         file.write(f"Macro-F1 score: {macro_f1:.4f}\n\n")
         file.write("Classification report:\n")
@@ -334,17 +338,19 @@ def main():
         file.write(np.array2string(matrix))
 
     np.savetxt(
-        os.path.join(OUTPUT_DIR, "cnn_confusion_matrix.csv"),
+        CONFUSION_PATH,
         matrix,
         delimiter=",",
-        fmt="%d"
+        fmt="%d",
     )
 
     print("\nTraining complete.")
-    print(f"Model saved to: {model_path}")
-    print(f"Evaluation saved to: {OUTPUT_DIR}/cnn_evaluation.txt")
-    print(f"Normalization saved to: {OUTPUT_DIR}/cnn_normalization.npz")
-    print(f"Class labels saved to: {OUTPUT_DIR}/emotion_classes.json")
+    print(f"Model saved to: {MODEL_PATH}")
+    print(f"Class labels saved to: {CLASSES_PATH}")
+    print(f"Normalization saved to: {NORMALIZATION_PATH}")
+    print(f"Evaluation saved to: {EVALUATION_PATH}")
+    print(f"Confusion matrix saved to: {CONFUSION_PATH}")
+    print(f"Training history saved to: {HISTORY_PATH}")
 
 
 if __name__ == "__main__":

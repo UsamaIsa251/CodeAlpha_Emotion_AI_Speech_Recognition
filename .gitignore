@@ -12,3 +12,8 @@ data/
 # Editor settings
 .vscode/
 Audio_Speech_Actors_01-24_16k.zip
+
+# Local backup files
+*.backup
+outputs/backup_before_retraining/
+outputs/emotion_cnn_new_backup.keras

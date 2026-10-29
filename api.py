@@ -10,9 +10,9 @@ import tensorflow as tf
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-MODEL_PATH = "outputs/emotion_cnn_new.keras"
-CLASSES_PATH = "outputs/emotion_classes.json"
-NORMALIZATION_PATH = "outputs/cnn_normalization.npz"
+MODEL_PATH = "outputs/emotion_cnn_retrained.keras"
+CLASSES_PATH = "outputs/emotion_classes_retrained.json"
+NORMALIZATION_PATH = "outputs/cnn_normalization_retrained.npz"
 
 MAX_FRAMES = 94
 N_MFCC = 40
